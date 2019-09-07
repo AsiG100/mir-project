@@ -1,5 +1,7 @@
 <?php
  session_start();
+
+	//sets session variables so the data will last the whole session
 	if(!isset($_SESSION["warehouse"])){
 		$_SESSION["warehouse"] = array();
 		$_SESSION["getItemByCatalog"] = array();
@@ -167,6 +169,7 @@
 		return $getItemByCatalog[$catNum];
 	};
 
+	// a readable display of a row or an array
 	function printArray($arr){
 		
 		foreach($arr as $key => $val){
@@ -274,6 +277,7 @@
 		return $getItemByCatalog[$data["catNum"]];
 	}
 
+	//adds package or item to rack with their coordinates
 	function addToRack($type, $data, $location){
 		global $warehouse;
 
@@ -292,9 +296,11 @@
 		$warehouse[$location["container"]]["racks"][$location["rack"]]["placements"][] = & $coords;
 	}
 
+	//reads the binary file
 	$h = fopen("mywarehouse", "rb");
 	$contentType = readUint8($h);
 
+	//initiates the file reading into a variable 
 	if(empty($warehouse)){
 		readContainer($h);
 	}
