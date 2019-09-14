@@ -1,7 +1,5 @@
 <?php
  session_start();
-
-	//sets session variables so the data will last the whole session
 	if(!isset($_SESSION["warehouse"])){
 		$_SESSION["warehouse"] = array();
 		$_SESSION["getItemByCatalog"] = array();
@@ -53,8 +51,9 @@
 		$name = readString($h);
 		$maxWeight = readNUint32($h);
 		$tareWeight = readNUint32($h);
-
 		$arrCount  = readUint16($h);
+		//keeps track on the current container listed
+		$currentContainer = $name;
 
 		$warehouse[$name] = array(
 			"width" => $width,
@@ -67,17 +66,19 @@
 		);
 
 		for($i=0; $i<$arrCount; $i++){
-			array_push($warehouse[$name]["racks"], readRack($h));
+			array_push($warehouse[$name]["racks"], readRack($h, $currentContainer));
 		}
 	};
 
-	function readRack($h) {
+	function readRack($h, $currentContainer) {
 		$width  = readUint16($h);
 		$length  = readUint16($h);
 		$height = readNUint16($h);
 		$name = readString($h);
 		$maxWeight = readNUint32($h);
 		$arrCount  = readUint16($h);
+		//keeps track on the current rack listed
+		$currentRack = $name -1;
 
 		$rack = array(
 			"width" => $width,
@@ -89,13 +90,15 @@
 		);
 
 		for($i=0; $i<$arrCount; $i++){
-			array_push($rack["placements"], readPlacement($h));
+			array_push($rack["placements"], readPlacement($h, $currentContainer, $currentRack));
 		}
 
 		return $rack;
 	};
 	
-	function readPlacement($h){
+	function readPlacement($h, $currentContainer, $currentRack){
+		global $getItemByCatalog, $getItemBySerialNum;
+
 		$x  = readUint16($h);
 		$y  = readUint16($h);
 		$contentType  = readUint8($h);
@@ -110,8 +113,11 @@
 			case 1: readContainer($h);
 					break;
 			case 2: $placement["content"] = & readItem($h);
+					$getItemByCatalog[$placement["content"]["catNum"]][] = array("container"=>$currentContainer, "rack"=>$currentRack, "content"=>& $placement["content"]);
+					$getItemBySerialNum[$placement["content"]["serialNum"]] = array("container"=>$currentContainer, "rack"=>$currentRack, "content"=>& $placement["content"]);
 					break;
 			case 3: $placement["content"] = & readPacket($h);
+					$getItemByCatalog[$placement["content"]["catNum"]][] = array("container"=>$currentContainer, "rack"=>$currentRack, "content"=>& $placement["content"]);
 					break;
 		}
 		
@@ -119,9 +125,6 @@
 	};
 	
 	function & readItem($h){
-		global $getItemByCatalog;
-		global $getItemBySerialNum;
-
 		$width  = readUint16($h);
 		$length  = readUint16($h);
 		$height = readNUint16($h);
@@ -138,15 +141,12 @@
 			"weight"=> $weight,
 		);
 
-		$getItemByCatalog[$catNum] = & $item;
-		$getItemBySerialNum[$serialNum] = & $item;
+		$res = & $item;
 
-		return $getItemBySerialNum[$serialNum];
+		return $res;
 	};
 	
 	function & readPacket($h){
-		global $getItemByCatalog;
-
 		$width  = readUint16($h);
 		$length  = readUint16($h);
 		$height = readNUint16($h);
@@ -164,19 +164,19 @@
 			"itemWeight"=> $itemWeight,
 			"quantity"=> $quantity,
 		);
+		
+		$res =  & $packet;
 
-		$getItemByCatalog[$catNum] = & $packet;
-		return $getItemByCatalog[$catNum];
+		return $res;
 	};
 
-	// a readable display of a row or an array
 	function printArray($arr){
 		
 		foreach($arr as $key => $val){
 			if(is_array($val)){
-				if(isset($val["contentType"]) && $val["contentType"] > 1 && !isset($val["content"])){
+				if(array_key_exists("content", $val) && !isset($val["content"])){
 					continue;
-				} 
+				}
 
 				echo "<br/><b>".$key.":</b><br/> ";
 				printArray($val);
@@ -210,7 +210,7 @@
 
 	function showItemBySerial($num){
 		global $getItemBySerialNum;
-		if(	isset($getItemBySerialNum[$num])){
+		if(	isset($getItemBySerialNum[$num]["content"])){
 				echo "==={$num}===<br/><br/>";
 				printArray($getItemBySerialNum[$num]);
 		}else {
@@ -223,6 +223,11 @@
 		if(	isset($getItemByCatalog[$num])){
 			echo "The following Item / Package has been removed <br/><br/>";
 			printArray($getItemByCatalog[$num]);
+
+			foreach($getItemByCatalog[$num] as $item){
+				$item["content"] = NULL;
+			}
+
 			$getItemByCatalog[$num] = NULL;
 		}else {
 			echo 'input error';
@@ -234,14 +239,14 @@
 		if(	isset($getItemBySerialNum[$num])){
 			echo "The following Item / Package has been removed <br/><br/>";
 			printArray($getItemBySerialNum[$num]);
-			$getItemBySerialNum[$num] = NULL;
+			$getItemBySerialNum[$num]["content"] = NULL;
 		}else {
 			echo 'input error';
 		}
 	}
 
 	function & addItemToRack($data){
-		global $warehouse, $getItemByCatalog, $getItemBySerialNum;
+		global $warehouse;
 		
 		$item = array(
 			"width" => intval($data["width"]),
@@ -249,18 +254,16 @@
 			"height"=> intval($data["height"]),
 			"catNum"=> $data["catNum"],
 			"serialNum"=> $data["serialNum"],
-			"weight"=> intval($data["weight"]),
+			"weight"=> intval($data["weight"]),	
 		);
 
-
-		$getItemByCatalog[$data["catNum"]] = & $item;
-		$getItemBySerialNum[$data["serialNum"]] = & $item;
+		$res =  & $item;
 		echo "Item has been added";
-		return $getItemBySerialNum[$data["serialNum"]];
+		return $res;
 	}
 
 	function & addPackageToRack($data){
-		global $warehouse, $getItemByCatalog;
+		global $warehouse;
 		
 		$package = array(
 			"width" => intval($data["width"]),
@@ -272,35 +275,69 @@
 			"quantity"=> intval($data["quantity"]),
 		);
 
-		$getItemByCatalog[$data["catNum"]] = & $package;
+		$res = & $package;
 		echo "Package has been added";
-		return $getItemByCatalog[$data["catNum"]];
+		return $res;
 	}
 
-	//adds package or item to rack with their coordinates
 	function addToRack($type, $data, $location){
-		global $warehouse;
+		global $warehouse, $getItemByCatalog, $getItemBySerialNum;
+		$thisRack = & $warehouse[$location["container"]]["racks"][$location["rack"]];
+		
+		if(hasSpaceInRack($thisRack, $data)){
+			$coords = array(
+				"x" => intval($location["x"]),
+				"y"=> intval($location["y"]),
+				"contentType"=> $type === "item"? 2 : 3,
+			);
+	
+			if($type === "item"){
+				$coords["content"] = & addItemToRack($data);
+				$getItemBySerialNum[$coords["content"]["serialNum"]] = array("container"=>$location["container"], "rack"=>$location["rack"], "content"=>& $coords["content"]);
+			}else{
+				$coords["content"] = & addPackageToRack($data);
+			}
 
-		$coords = array(
-			"x" => intval($location["x"]),
-			"y"=> intval($location["y"]),
-			"contentType"=> $type === "item"? 2 : 3,
-		);
+			$getItemByCatalog[$coords["content"]["catNum"]][] = array("container"=>$location["container"], "rack"=>$location["rack"], "content"=>& $coords["content"]);
 
-		if($type === "item"){
-			$coords["content"] = & addItemToRack($data);
+	
+			$thisRack["placements"][] = & $coords;
 		}else{
-			$coords["content"] = & addPackageToRack($data);
+			echo "Insufficient space, please choose another rack";
+		}
+	}
+
+	function hasSpaceInRack($rack, $newObj){
+		$capacity = calculateVolume($rack);
+		$load = $rack['maxWeight'];
+		$spaceTaken = -0;
+		$objects = $rack["placements"];
+
+		foreach($objects as $obj){
+			$spaceTaken += calculateVolume($obj['content']);
+			
+			$weight = (isset($obj['content']['itemWeight']))? $obj['content']['itemWeight'] : $obj['content']['weight'];
+			$load -=  $weight;
 		}
 
-		$warehouse[$location["container"]]["racks"][$location["rack"]]["placements"][] = & $coords;
+		$freeSpace = $capacity - $spaceTaken - calculateVolume($newObj);
+		$load -= $newObj['weight'];
+
+		if($freeSpace > 0 && $load > 0){
+			echo "Free space: ".$freeSpace."<br/>";
+			echo "Free weight: ".$load."<br/>";
+		}
+
+		return $freeSpace > 0 && $load > 0;
 	}
 
-	//reads the binary file
+	function calculateVolume($obj){
+		return $obj['width'] * $obj['length'] * $obj['height'];
+	}
+
 	$h = fopen("mywarehouse", "rb");
 	$contentType = readUint8($h);
 
-	//initiates the file reading into a variable 
 	if(empty($warehouse)){
 		readContainer($h);
 	}

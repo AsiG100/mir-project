@@ -73,12 +73,10 @@ global $warehouse, $getItemByCatalog, $getItemBySerialNum;
         <div id="res">
         <?php
 
-        //show inventory by container and rack
         if(isset($_POST["container"]) && isset($_POST["rack"])){
             showShelfInventory($_POST["container"], $_POST["rack"]);
         }
 
-        //finds item or package by serial number or catalog
         if(isset($_POST["find"]) && isset($_POST["type"]) && isset($_POST["num"])){
             if($_POST["type"] === "catalog"){
                 showItemByCatalog($_POST["num"]);
@@ -87,7 +85,6 @@ global $warehouse, $getItemByCatalog, $getItemBySerialNum;
             }
         }
 
-        //removes item or package by serial number or catalog
         if(isset($_POST["remove"]) && isset($_POST["type"]) && isset($_POST["num"])){
             if($_POST["type"] === "catalog"){
                 removeItemByCatalog($_POST["num"]);
@@ -96,13 +93,13 @@ global $warehouse, $getItemByCatalog, $getItemBySerialNum;
             }
         }
 
-        //adds item or package by location details
         if(isset($_POST["add"]) && isset($_POST["data"]) && isset($_POST["location"])){
             addToRack($_POST["type"], $_POST["data"],$_POST["location"]);
         }
 
-        //resets to the initial warehouse data
         if(isset($_POST["reset"])){
+            global $getItemByCatalog;
+            $getItemByCatalog = array();
             readContainer($h);
             unset($_POST["reset"]);
         }
